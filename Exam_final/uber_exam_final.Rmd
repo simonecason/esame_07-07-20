@@ -1,0 +1,224 @@
+---
+title: "Exploratory Analysis - Uber Pickups"
+author: "Simone Cason"
+date: "07/07/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+"Uber Technologies, Inc., commonly known as Uber, is an American multinational ride-hailing company offering services that include peer-to-peer ridesharing, ride service hailing, food delivery (Uber Eats), and a micromobility system with electric bikes and scooters. The company is based in San Francisco and has operations in over 785 metropolitan areas worldwide. Its platforms can be accessed via its websites and mobile apps." (https://en.wikipedia.org/wiki/Uber)
+
+*Seeing Uber's fame today, I wanted to analyze one of the company's early years in New York*
+
+**I selected the 2014 Uber pickup data for analysis (6 csv files from months April to September)**
+![](https://cdn.hipwallpaper.com/i/76/88/eusdmV.jpg)
+
+
+```{r The Setup, echo = FALSE, message = FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, fig.width = 9, fig.height = 6)
+library(tidyverse)
+library(lubridate)
+library(knitr)
+library(tidyr)
+library(DT)
+library(scales)
+library(ggplot2)
+library(ggthemes)
+library(dplyr)
+#Sys.setlocale("LC_TIME", "English")
+mycolors<- c("#6A040F","#9D0208",	"#D00000","#DC2F02","#E85D04","#F48C06","#FAA307")
+mycolors_base<- rev(c("#ff0000","#ff7400","#ff8c00","#ffc200","#ffff00"))
+```
+
+```{r, echo = FALSE, message=FALSE}
+### Read data
+uber_raw_apr14 <- read_csv("uber-raw-data-apr14.csv")
+uber_raw_may14 <- read_csv("uber-raw-data-may14.csv")
+uber_raw_jun14 <- read_csv("uber-raw-data-jun14.csv")
+uber_raw_jul14 <- read_csv("uber-raw-data-jul14.csv")
+uber_raw_aug14 <- read_csv("uber-raw-data-aug14.csv")
+uber_raw_sep14 <- read_csv("uber-raw-data-sep14.csv")
+
+uber_2014 <- rbind(uber_raw_apr14, uber_raw_may14, uber_raw_jun14, uber_raw_jul14, uber_raw_aug14, uber_raw_sep14)
+
+#typeof(uber_2014$`Date/Time`)
+```
+
+### Goals
+1. Find the most used **month**;
+2. Find out **where** uber is most called;
+3. Find the **time and day** where people travel with Uber;
+4. Check the most used **Base**.
+
+### Clean data
+#### NYC uber pickups table
+
+```{r,echo = 2:2}
+kable(head(uber_2014, 8))
+```
+
+### Format date 
+#### Update Date/Time using lubridate to crate date segments. 
+
+```{r, warning=FALSE, echo = FALSE}
+uber_2014$`Date_Time` <- as.POSIXct(uber_2014$`Date/Time`, format = "%m/%d/%Y %H:%M:%S")
+
+uber_2014 <- uber_2014 %>%
+     mutate(Date_Time = as.POSIXct(`Date/Time`, format = "%m/%d/%Y %H:%M:%S"),
+            Month = month(Date_Time, label = TRUE),
+            Day = day(Date_Time),
+            Hour = hour(Date_Time),
+            Weekday = wday(Date_Time, label = TRUE))
+
+```
+```{r, echo = 2:2}
+kable(head(uber_2014, 8))
+```
+
+### Quick Plots
+#### Order count by month   
+We're seeing a consistent increase in order volume each month. September 2014 passes the 1,000,000 pickups per month mark.
+
+```{r, warning=FALSE, echo = FALSE}
+uber_2014 %>%   
+  ggplot(aes(x=Month)) + 
+  ggtitle("Count by month") +
+  geom_histogram(stat = "count", fill= "#f24224") +
+  scale_y_continuous(labels=function(n){format(n, scientific = FALSE)})
+```
+
+#### Order count by Weekday
+We can see that on Friday and Thursday people used Uber more than the other days.
+
+```{r, warning=FALSE, echo = FALSE}
+#count(uber_2014, Weekday)
+ggplot(uber_2014, aes(Weekday)) +
+  geom_bar(fill = "#f24224") + 
+   ggtitle("Total count of trips by Weekday") +
+  scale_y_continuous(labels=function(n){format(n, scientific = FALSE)})
+  
+
+avg_Wday <- uber_2014 %>%
+  group_by(Weekday) %>% 
+  summarise(avg_Weekday = n() / 24)
+
+ggplot(avg_Wday, aes(Weekday, avg_Weekday)) +
+  geom_line(aes(group = 1), size = 1.5, col = "#f24224") +
+  geom_point(size = 3, col = "black") +
+  ggtitle("Avg count of trips by Weekday")
+```
+
+#### Order count by hour (all months included)  
+We also see peak pickup times in the morning hours (7-8am) and the late afternoon (4-6pm).
+
+```{r, warning=FALSE, echo = FALSE}
+uber_2014 %>% 
+  ggplot(aes(x=Hour)) + 
+  geom_histogram(stat = "count", fill="#f24224") +
+  ggtitle("Count by hour") +
+  scale_y_continuous(labels=function(n){format(n, scientific = FALSE)})
+```
+
+#### Order count by Month and Weekday
+We can see that the weekends are not the most popular in every month.
+```{r, warning=FALSE, echo = FALSE}
+month_weekday <- uber_2014 %>%
+         group_by(Month, Weekday) %>%
+             dplyr::summarize(Total = n())
+             
+ggplot(month_weekday, aes(Month, Total, fill = Weekday)) + 
+       geom_bar( stat = "identity", position = "dodge") +
+          ggtitle("Trips by Day and Month") +
+           scale_y_continuous(labels = comma) +
+            scale_fill_manual(values = mycolors)
+```
+
+### Finding out the number of Trips by bases
+In the following visualization, we plot the number of trips that have been taken by the passengers from each of the bases. There are five bases in all out of which, we observe that B02617 had the highest number of trips. Moreover, this base had the highest number of trips in the month. 
+
+```{r, warning=FALSE, echo = FALSE}
+#Trips by Bases
+ggplot(uber_2014, aes(Base)) + 
+ geom_bar(fill = "#f24224") +
+ scale_y_continuous(labels = comma) +
+ ggtitle("Trips by Bases")
+#Trips by Bases and Month
+ggplot(uber_2014, aes(Base, fill = Month)) + 
+ geom_bar(position = "dodge") +
+ scale_y_continuous(labels = comma) +
+ ggtitle("Trips by Bases and Month")+
+ scale_fill_manual(values = mycolors)
+
+#Trips by Bases and Weekday
+ggplot(uber_2014, aes(Base, fill = Weekday)) + 
+ geom_bar(position = "dodge") +
+ scale_y_continuous(labels = comma) +
+ ggtitle("Trips by Bases and Weekday") +
+ scale_fill_manual(values = mycolors)
+```
+
+### Map coordinates
+Next, let's explore lat/lon values. Starting with a simple plot of pickup coordinates:
+
+```{r, warning=FALSE, echo = FALSE}
+ggplot(uber_2014, aes(Lon,Lat)) + geom_point(alpha = .06, size=0.01, colour="#f24224") 
+
+```
+```{r, warning=FALSE, echo = FALSE}
+min_lat <- 40.5774
+max_lat <- 40.9176
+min_long <- -74.15
+max_long <- -73.7004
+
+ggplot(uber_2014, aes(x=Lon, y=Lat, color = Base)) + geom_point(alpha = 1, size = 1) + scale_x_continuous(limits=c(min_long, max_long)) +
+scale_y_continuous(limits=c(min_lat, max_lat)) + theme_map() +
+scale_color_manual(values = mycolors_base)
+```
+
+### Leaflet
+#### "Leaflet is the leading open-source JavaScript library for mobile-friendly interactive maps."
+
+We have more than 1 million of data points to map, and will need aggregation to work effectively with this tool. 
+In place of this, I'm going to select the top 6 delivery locations by total volume. 
+I'm also going to round to three decimals (to have more precision).
+
+```{r, warning=FALSE, echo = FALSE}
+
+uber_2014_top <- uber_2014 %>%
+    mutate(Lat_3 = round(Lat, 3),Lon_3 = round(Lon, 3)) %>% 
+    count(Lat_3, Lon_3, sort = TRUE) %>% 
+    head()
+
+library(leaflet)
+
+leaflet(uber_2014_top) %>%
+  addTiles() %>%
+  setView(-74.00, 40.71, zoom = 10) %>%
+  addMarkers(~Lon_3, ~Lat_3)
+
+```
+
+### Achievements
+
+***Thanks to the previous analyzes, we have reached these points:***
+
+1. Number of Uber Trips increase as the Days progress in a month; 
+
+2. The Month of **September, 2014** has seen the **most** Rides;
+
+3. The Time between **15hrs to 19hrs** has the **most** Rides. In other words the Trips increase in this Time frame;
+4. The time between **0hrs to 4hrs** see the **least** number of rides;
+
+5. **Thursdays** and **Fridays** observe the **highest** amount of rides as compared to other days;
+
+6. **B02598** and **B02617** bases have the **most** amount of **rides** during Apr'14 to Sep'14;
+
+7. For **B02512** the no. of Rides have almost remained **constant**;
+
+8. *September* was the *best* month for **B02764** & **B02617**, *May* was the *best* month for **B02598**, *April* was the *best* month for **B02682**.
+
+
+
+
+
+
